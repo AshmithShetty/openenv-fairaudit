@@ -1,3 +1,13 @@
+---
+title: FairAudit
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+tags:
+  - openenv
+---
+
 # OpenEnv: FairAudit
 
 ## Environment Description & Motivation
