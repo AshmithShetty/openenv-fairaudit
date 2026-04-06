@@ -1,29 +1,16 @@
-from pydantic import BaseModel
-from typing import Any, Dict
-
-class BiasAuditObservation(BaseModel):
-    task_name: str
-    step_number: int
-    progress_hint: str
-
-class BiasAuditAction(BaseModel):
-    action_type: str
-    parameters: Dict[str, Any]
-    reasoning: str
+from typing import Any, Tuple
+from server.models import BiasAuditObservation, BiasAuditAction, BiasAuditReward
+from server.environment import FairAuditEnvironment
 
 class FairAuditEnv:
     def __init__(self):
-        pass
+        self.env = FairAuditEnvironment()
 
-    async def reset(self, task_name: str = "dataset-scan") -> Any:
-        return BiasAuditObservation(
-            task_name=task_name,
-            step_number=0,
-            progress_hint="Environment initialized."
-        )
+    async def reset(self, task_name: str = "dataset-scan") -> BiasAuditObservation:
+        return self.env.reset(task_name)
 
-    async def step(self, action: BiasAuditAction) -> Any:
-        pass
+    async def step(self, action: BiasAuditAction) -> Tuple[BiasAuditObservation, float, bool, dict]:
+        return self.env.step(action)
 
     async def state(self) -> dict:
-        return {"status": "initialized"}
+        return self.env.state_dump()
