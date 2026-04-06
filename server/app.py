@@ -5,6 +5,10 @@ from client import FairAuditEnv
 app = FastAPI()
 env_instance = FairAuditEnv()
 
+@app.get("/")
+def read_root():
+    return {"message": "FairAudit Environment is online. API is ready."}
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
