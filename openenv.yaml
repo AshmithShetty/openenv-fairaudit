@@ -1,0 +1,15 @@
+name: fairaudit-env
+version: 1.0.0
+spec_version: "1.0"
+description: An environment to audit and mitigate bias in predictive models.
+tags:
+  - bias
+  - fairness
+  - real-world
+client: client:FairAuditEnv
+action: client:BiasAuditAction
+observation: client:BiasAuditObservation
+tasks:
+  - dataset-scan
+  - model-audit
+  - bias-mitigation
