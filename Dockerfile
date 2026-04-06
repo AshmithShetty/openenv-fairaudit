@@ -8,10 +8,18 @@ ENV PATH="/home/user/.local/bin:$PATH"
 
 WORKDIR /app
 
-COPY --chown=user pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-cache
+# Ensure Python can always find files in the root directory
+ENV PYTHONPATH="/app"
 
+# 1. Copy config and install dependencies only (uses Docker layer caching)
+COPY --chown=user pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-cache --no-install-project
+
+# 2. Copy the actual source code
 COPY --chown=user . .
+
+# 3. Install the project modules and link the entry points
+RUN uv sync --frozen --no-cache
 
 EXPOSE 7860
 
