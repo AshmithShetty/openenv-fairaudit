@@ -18,7 +18,8 @@ dependencies = [
     "numpy==1.26.0",
     "fairlearn==0.10.0",
     "openai",
-    "python-dotenv"
+    "python-dotenv",
+    "pytest>=9.0.2",
 ]
 
 [project.scripts]
