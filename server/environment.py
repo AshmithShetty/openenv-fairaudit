@@ -3,6 +3,9 @@ from server.models import BiasAuditObservation, BiasAuditAction, BiasAuditReward
 from server.state import EpisodeState
 from server.data.generator import DataGenerator
 import server.actions.handlers as handlers
+import server.graders.grader_t1 as grader_t1
+import server.graders.grader_t2 as grader_t2
+import server.graders.grader_t3 as grader_t3
 
 class FairAuditEnvironment:
     def __init__(self):
@@ -11,6 +14,11 @@ class FairAuditEnvironment:
 
     def reset(self, task_name: str = "dataset-scan") -> BiasAuditObservation:
         scenario_name = "hiring"
+        if task_name == "model-audit":
+            scenario_name = "loan"
+        elif task_name == "bias-mitigation":
+            scenario_name = "medical"
+            
         df, ground_truth = self.generator.generate(scenario_name, seed=42)
         
         self.state = EpisodeState(
@@ -29,7 +37,7 @@ class FairAuditEnvironment:
             dataset_info={"columns": list(df.columns), "rows": len(df)},
             findings=[],
             fairness_metrics=FairnessMetrics(),
-            available_actions=["inspect_column", "check_correlation", "submit"],
+            available_actions=["inspect_column", "check_correlation", "sample_rows", "flag_bias", "submit"],
             last_action_result={"status": "initialized"},
             progress_hint="Environment initialized."
         )
@@ -67,6 +75,21 @@ class FairAuditEnvironment:
         done = self.state.current_step >= self.state.max_steps or action.action_type == "submit"
         self.state.is_done = done
         
+        # Grading execution upon submission
+        if action.action_type == "submit":
+            if self.state.task_name == "dataset-scan":
+                reward_val = grader_t1.grade(self.state)
+            elif self.state.task_name == "model-audit":
+                reward_val = grader_t2.grade(self.state)
+            elif self.state.task_name == "bias-mitigation":
+                reward_val = grader_t3.grade(self.state)
+            else:
+                reward_val = 0.0
+                
+            self.state.accumulated_reward = reward_val
+        else:
+            self.state.accumulated_reward += reward_val
+        
         obs = BiasAuditObservation(
             task_name=self.state.task_name,
             step_number=self.state.current_step,
@@ -74,16 +97,16 @@ class FairAuditEnvironment:
             dataset_info={"columns": list(self.state.df.columns), "rows": len(self.state.df)},
             findings=self.state.findings,
             fairness_metrics=FairnessMetrics(),
-            available_actions=["inspect_column", "check_correlation", "submit"],
+            available_actions=list(action_map.keys()),
             last_action_result=result,
-            progress_hint="Action executed."
+            progress_hint="Action executed." if not done else f"Episode complete. Final Score: {self.state.accumulated_reward}"
         )
         
         reward_obj = BiasAuditReward(
             value=reward_val,
             breakdown={action.action_type: reward_val},
-            accumulated_total=0.0,
-            feedback="Stub feedback executed."
+            accumulated_total=self.state.accumulated_reward,
+            feedback="Execution complete."
         )
         
         return obs, reward_obj.value, done, {"reward_details": reward_obj.model_dump()}
