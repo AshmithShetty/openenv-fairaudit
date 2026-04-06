@@ -1,15 +1,21 @@
-name: fairaudit-env
-version: 1.0.0
-spec_version: "1.0"
-description: An environment to audit and mitigate bias in predictive models.
-tags:
-  - bias
-  - fairness
-  - real-world
-client: client:FairAuditEnv
-action: client:BiasAuditAction
-observation: client:BiasAuditObservation
+version: "1.0"
+environment:
+  name: "openenv-fairaudit"
+  description: "A single-domain, end-to-end MLOps pipeline simulating the audit and mitigation of algorithmic bias in a financial loan approval model."
+  version: "1.0.0"
+
 tasks:
-  - dataset-scan
-  - model-audit
-  - bias-mitigation
+  - id: "dataset-scan"
+    name: "Dataset Scan"
+    description: "Scan raw loan applicant data to identify hidden proxy variables correlating with protected attributes."
+    difficulty: "easy"
+
+  - id: "model-audit"
+    name: "Model Audit"
+    description: "Evaluate a pre-trained baseline loan approval model, compute Disparate Impact, and flag compliance violations."
+    difficulty: "medium"
+
+  - id: "bias-mitigation"
+    name: "Bias Mitigation"
+    description: "Apply algorithmic mitigations to the biased model while navigating the Pareto Trap to avoid catastrophic accuracy loss."
+    difficulty: "hard"

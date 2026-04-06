@@ -9,11 +9,8 @@ class LoanScenario(BaseScenario):
         rng = np.random.RandomState(seed)
         n_samples = self.MAX_ROWS
         
-        # 1. Latent Protected Attribute (Race: 0=Majority, 1=Minority)
         race_latent = rng.choice([0, 1], size=n_samples, p=[0.65, 0.35])
         
-        # 2. Proxy Variables
-        # Zip code strongly proxies race
         zip_maj = ['75001', '75002', '75003']
         zip_min = ['75004', '75005', '75006']
         zip_code = np.where(
@@ -22,32 +19,26 @@ class LoanScenario(BaseScenario):
             rng.choice(zip_maj + zip_min, size=n_samples, p=[0.05, 0.05, 0.05, 0.283, 0.283, 0.284])
         )
         
-        # Income generation (Historical disparity injected)
         base_income = rng.lognormal(mean=11.0, sigma=0.5, size=n_samples)
         income_penalty = race_latent * (15000 * bias_magnitude)
         annual_income = np.maximum(20000, base_income - income_penalty).round(-3)
         
-        # FICO Score (Correlated with income, therefore indirectly proxying race)
         base_fico = 600 + (annual_income / 1000) * 1.5 + rng.normal(0, 30, size=n_samples)
         fico_score = np.clip(base_fico, 300, 850).astype(int)
         
-        # 3. Standard Features
-        debt_to_income = rng.uniform(0.1, 0.6, size=n_samples)
+        debt_to_income_ratio = rng.uniform(0.1, 0.6, size=n_samples)
         employment_length = rng.randint(0, 15, size=n_samples)
         home_ownership = rng.choice(['MORTGAGE', 'RENT', 'OWN'], size=n_samples, p=[0.4, 0.5, 0.1])
         education_level = rng.choice(['Bachelors', 'High School', 'Masters', 'Associate'], size=n_samples)
         
-        # 4. Target Variable Generation (Loan Approval)
-        # Approval heavily weights FICO and DTI
-        approval_score = (fico_score * 0.5) - (debt_to_income * 500) + (employment_length * 5)
+        approval_score = (fico_score * 0.5) - (debt_to_income_ratio * 500) + (employment_length * 5)
         
-        # Top 40% get approved
         threshold = np.percentile(approval_score, 60)
         loan_approved = (approval_score >= threshold).astype(int)
         
         df = pd.DataFrame({
             'annual_income': annual_income,
-            'debt_to_income': debt_to_income.round(2),
+            'debt_to_income_ratio': debt_to_income_ratio.round(2),
             'fico_score': fico_score,
             'employment_length': employment_length,
             'home_ownership': home_ownership,
@@ -57,7 +48,6 @@ class LoanScenario(BaseScenario):
             '_latent_race': race_latent
         })
         
-        # 5. Compute Ground Truth Metrics
         race_metrics = calculate_historical_fairness(df, '_latent_race', 'loan_approved', priv_value=0, pos_outcome=1)
         
         severities = {

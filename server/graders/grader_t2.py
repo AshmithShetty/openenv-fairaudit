@@ -11,11 +11,11 @@ def grade(state: EpisodeState) -> float:
     max_score = 0.0
 
     computed_di_values = []
-    for k, v in state.computed_metrics.items():
-        if "disparate_impact" in v:
-            computed_di_values.append(v["disparate_impact"])
+    if hasattr(state, "computed_metrics"):
+        for k, v in state.computed_metrics.items():
+            if "disparate_impact" in v:
+                computed_di_values.append(v["disparate_impact"])
 
-    # 1. Evaluate Metric Computation Accuracy (Tolerance epsilon = 0.02)
     for gt_group, gt_vals in gt_metrics.items():
         max_score += 0.5 
         gt_di = gt_vals.get("disparate_impact", 1.0)
@@ -31,7 +31,6 @@ def grade(state: EpisodeState) -> float:
         elif best_diff <= 0.05:
             score += 0.25
 
-    # 2. Evaluate Violation Severity Correctness
     agent_severities = {}
     for f in state.findings:
         if f.finding_type == "violation":
