@@ -2,6 +2,7 @@ from typing import Tuple, Dict, Any
 from server.models import BiasAuditObservation, BiasAuditAction, BiasAuditReward, FairnessMetrics
 from server.state import EpisodeState
 from server.data.generator import DataGenerator
+from server.reward import RewardEngine
 import server.actions.handlers as handlers
 import server.graders.grader_t1 as grader_t1
 import server.graders.grader_t2 as grader_t2
@@ -10,6 +11,7 @@ import server.graders.grader_t3 as grader_t3
 class FairAuditEnvironment:
     def __init__(self):
         self.generator = DataGenerator()
+        self.reward_engine = RewardEngine()
         self.state = None
 
     def reset(self, task_name: str = "dataset-scan") -> BiasAuditObservation:
@@ -66,29 +68,32 @@ class FairAuditEnvironment:
         
         handler = action_map.get(action.action_type)
         if handler:
-            result, reward_val = handler(self.state, action.parameters)
+            result, _ = handler(self.state, action.parameters)
         else:
-            result, reward_val = {"error": f"Unknown action: {action.action_type}"}, -0.1
+            result = {"error": f"Unknown action: {action.action_type}"}
             
         self.state.action_history.add(f"{action.action_type}_{self.state.current_step}")
-        
         done = self.state.current_step >= self.state.max_steps or action.action_type == "submit"
         self.state.is_done = done
         
-        # Grading execution upon submission
+        # Reward Evaluation
         if action.action_type == "submit":
             if self.state.task_name == "dataset-scan":
-                reward_val = grader_t1.grade(self.state)
+                grader_score = grader_t1.grade(self.state)
             elif self.state.task_name == "model-audit":
-                reward_val = grader_t2.grade(self.state)
+                grader_score = grader_t2.grade(self.state)
             elif self.state.task_name == "bias-mitigation":
-                reward_val = grader_t3.grade(self.state)
+                grader_score = grader_t3.grade(self.state)
             else:
-                reward_val = 0.0
+                grader_score = 0.0
                 
-            self.state.accumulated_reward = reward_val
+            final_reward = self.reward_engine.calculate_final_score(self.state.accumulated_reward, grader_score)
+            step_reward = final_reward
+            feedback = f"Episode complete. Grader Score: {grader_score:.2f}. Final Weighted Score: {final_reward:.2f}"
+            self.state.accumulated_reward = final_reward
         else:
-            self.state.accumulated_reward += reward_val
+            step_reward, feedback = self.reward_engine.calculate_step_reward(action.action_type, action.parameters, result, self.state)
+            self.state.accumulated_reward += step_reward
         
         obs = BiasAuditObservation(
             task_name=self.state.task_name,
@@ -99,14 +104,14 @@ class FairAuditEnvironment:
             fairness_metrics=FairnessMetrics(),
             available_actions=list(action_map.keys()),
             last_action_result=result,
-            progress_hint="Action executed." if not done else f"Episode complete. Final Score: {self.state.accumulated_reward}"
+            progress_hint=feedback
         )
         
         reward_obj = BiasAuditReward(
-            value=reward_val,
-            breakdown={action.action_type: reward_val},
-            accumulated_total=self.state.accumulated_reward,
-            feedback="Execution complete."
+            value=float(step_reward),
+            breakdown={action.action_type: float(step_reward)},
+            accumulated_total=float(self.state.accumulated_reward),
+            feedback=feedback
         )
         
         return obs, reward_obj.value, done, {"reward_details": reward_obj.model_dump()}
