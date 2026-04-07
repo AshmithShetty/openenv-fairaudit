@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: fairaudit-env
+Version: 1.0.0
+Summary: An environment to audit and mitigate bias in predictive models.
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: openenv-core==0.2.3
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: pydantic
+Requires-Dist: scikit-learn==1.3.1
+Requires-Dist: pandas==2.1.1
+Requires-Dist: numpy==1.26.0
+Requires-Dist: fairlearn==0.10.0
+Requires-Dist: openai
+Requires-Dist: python-dotenv
+Requires-Dist: pytest>=9.0.2
+
+---
+title: FairAudit Env
+sdk: docker
+app_port: 7860
+---
+# FairAudit Environment
+An OpenEnv environment for bias auditing.

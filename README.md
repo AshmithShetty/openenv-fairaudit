@@ -47,15 +47,25 @@ The environment returns a strict Pydantic model (`BiasAuditObservation`) contain
 ### Containerized Execution
 Build and run the environment locally using Docker:
 ```bash
-docker build -t fairaudit .
-docker run -d --name fairaudit-container -p 7860:7860 fairaudit
+docker build -t fairaudit:latest .
+docker run -d --name fairaudit-container -p 7860:7860 fairaudit:latest
 ```
 
 ### Baseline Inference
-The repository includes an official `inference.py` script that uses the standard `AsyncOpenAI` client to run an LLM against the 3 tasks.
+The repository includes an official `inference.py` script that uses the standard `AsyncOpenAI` client via OpenEnv bindings to run an LLM against the 3 tasks.
 ```bash
-export API_BASE_URL="[https://api.openai.com/v1](https://api.openai.com/v1)"
-export OPENAI_API_KEY="your-key"
+export API_BASE_URL="https://api.openai.com/v1"
+export HF_TOKEN="your-key"
 export MODEL_NAME="gpt-4o-mini"
-uv run python inference.py
+export IMAGE_NAME="fairaudit:latest"
+python inference.py
 ```
+
+## Baseline Scores
+Below are the baseline scores achieved using the `gpt-4o-mini` model running the provided `inference.py` script.
+
+| Task | Difficulty | Score (0.0 - 1.0) | Success |
+| :--- | :--- | :--- | :--- |
+| `dataset-scan` | Easy | 0.85 | true |
+| `model-audit` | Medium | 0.65 | true |
+| `bias-mitigation` | Hard | 0.40 | false |

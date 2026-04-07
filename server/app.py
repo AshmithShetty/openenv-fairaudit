@@ -1,11 +1,31 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import uvicorn
 import json
-from client import FairAuditEnv
-from server.models import BiasAuditAction
+from typing import Dict, Tuple
+
+from server.models import BiasAuditAction, BiasAuditObservation
+from server.environment import FairAuditEnvironment
+
+class SessionManager:
+    def __init__(self):
+        self.active_sessions: Dict[str, FairAuditEnvironment] = {}
+
+    async def reset(self, task_name: str = "dataset-scan", session_id: str = "default") -> BiasAuditObservation:
+        self.active_sessions[session_id] = FairAuditEnvironment()
+        return self.active_sessions[session_id].reset(task_name)
+
+    async def step(self, action: BiasAuditAction, session_id: str = "default") -> Tuple[BiasAuditObservation, float, bool, dict]:
+        if session_id not in self.active_sessions:
+            raise ValueError(f"Session {session_id} not initialized. Call reset first.")
+        return self.active_sessions[session_id].step(action)
+
+    async def state(self, session_id: str = "default") -> dict:
+        if session_id not in self.active_sessions:
+            return {"status": "uninitialized"}
+        return self.active_sessions[session_id].state_dump()
 
 app = FastAPI()
-env_manager = FairAuditEnv()
+env_manager = SessionManager()
 
 @app.get("/")
 def read_root():

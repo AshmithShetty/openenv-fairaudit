@@ -1,28 +1,41 @@
 import os
 import json
 import asyncio
-import websockets
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI
 
+from client import FairAuditEnv
+from server.models import BiasAuditAction
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
 API_KEY = os.environ.get("HF_TOKEN", os.environ.get("OPENAI_API_KEY", "dummy_key"))
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+IMAGE_NAME = os.environ.get("IMAGE_NAME", "fairaudit:latest")
 BENCHMARK = "openenv-fairaudit"
 
-MAX_STEPS = 15
-SUCCESS_SCORE_THRESHOLD = 0.5
+# Task-specific step limits based on difficulty
+TASK_STEPS = {
+    "dataset-scan": 10,
+    "model-audit": 15,
+    "bias-mitigation": 25
+}
 
+# Derived from reward.py normalization standard (1.5 max points)
+MAX_TOTAL_REWARD = 1.5
+SUCCESS_SCORE_THRESHOLD = 0.5
 
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
-def log_step(step: int, action: str, reward: float, done: bool, error: str) -> None:
-    print(f"[STEP] step={step} action={action} reward={reward} done={done} error={error}", flush=True)
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    done_str = "true" if done else "false"
+    error_str = "null" if error is None else error
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={error_str}", flush=True)
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
-    print(f"[END] success={success} steps={steps} score={score:.2f} rewards={rewards}", flush=True)
+    success_str = "true" if success else "false"
+    rewards_str = ",".join([f"{r:.2f}" for r in rewards])
+    print(f"[END] success={success_str} steps={steps} rewards={rewards_str}", flush=True)
 
 async def get_model_action(client: AsyncOpenAI, obs: Dict[str, Any], history: List[str]) -> str:
     system_prompt = """You are an AI fairness auditing agent.
@@ -50,22 +63,28 @@ Available actions are listed in the observation. To finish, use action_type: 'su
     except Exception as e:
         return json.dumps({"action_type": "submit", "parameters": {}, "reasoning": f"Error: {str(e)}"})
 
-async def run_task(ws: websockets.WebSocketClientProtocol, client: AsyncOpenAI, task_name: str) -> None:
+async def run_task(client: AsyncOpenAI, task_name: str) -> None:
     history: List[str] = []
     rewards: List[float] = []
     steps_taken = 0
     score = 0.0
     success = False
+    max_steps = TASK_STEPS.get(task_name, 15)
 
     log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
 
     try:
-        await ws.send(json.dumps({"command": "reset", "task_name": task_name}))
-        reset_res = json.loads(await ws.recv())
-        obs = reset_res.get("data", reset_res)
+        # Initialize isolated OpenEnv container
+        env = await FairAuditEnv.from_docker_image(IMAGE_NAME)
         
-        for step in range(1, MAX_STEPS + 1):
-            action_json = await get_model_action(client, obs, history)
+        result = await env.reset(task_name=task_name)
+        obs_data = result.observation.model_dump() if hasattr(result.observation, "model_dump") else result.observation
+        
+        for step in range(1, max_steps + 1):
+
+            
+
+            action_json = await get_model_action(client, obs_data, history)
             
             try:
                 action_dict = json.loads(action_json)
@@ -73,13 +92,14 @@ async def run_task(ws: websockets.WebSocketClientProtocol, client: AsyncOpenAI, 
                 action_dict = {"action_type": "submit", "parameters": {}, "reasoning": "JSON Parse Error"}
                 action_json = json.dumps(action_dict)
 
-            await ws.send(json.dumps({"command": "step", "action": action_dict}))
+            # Map the parsed JSON back to the OpenEnv Action Model
+            action_obj = BiasAuditAction(**action_dict)
+            step_result = await env.step(action_obj)
             
-            step_res = json.loads(await ws.recv())
-            obs = step_res.get("observation", {})
-            reward = float(step_res.get("reward", 0.0))
-            done = step_res.get("done", True)
-            error = step_res.get("error", None)
+            obs_data = step_result.observation.model_dump() if hasattr(step_result.observation, "model_dump") else step_result.observation
+            reward = float(step_result.reward or 0.0)
+            done = bool(step_result.done)
+            error = step_result.info.get("error", None)
 
             rewards.append(reward)
             steps_taken = step
@@ -88,9 +108,10 @@ async def run_task(ws: websockets.WebSocketClientProtocol, client: AsyncOpenAI, 
             history.append(f"Step {step}: {action_json} -> Reward {reward}")
 
             if done:
-                score = reward
                 break
 
+        # Calculate final score
+        score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.0
         score = min(max(score, 0.0), 1.0)
         success = score >= SUCCESS_SCORE_THRESHOLD
 
@@ -98,18 +119,19 @@ async def run_task(ws: websockets.WebSocketClientProtocol, client: AsyncOpenAI, 
         print(f"[DEBUG] Error running task {task_name}: {e}", flush=True)
         
     finally:
+        try:
+            if "env" in locals():
+                await env.close()
+        except Exception as e:
+            print(f"[DEBUG] env.close() error: {e}", flush=True)
+            
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 async def main() -> None:
     client = AsyncOpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-    uri = "ws://localhost:7860/ws/inference_agent"
     
-    try:
-        async with websockets.connect(uri) as ws:
-            for task in ["dataset-scan", "model-audit", "bias-mitigation"]:
-                await run_task(ws, client, task)
-    except Exception as e:
-        print(f"Failed to connect to environment: {e}")
+    for task in ["dataset-scan", "model-audit", "bias-mitigation"]:
+        await run_task(client, task)
 
 if __name__ == "__main__":
     asyncio.run(main())

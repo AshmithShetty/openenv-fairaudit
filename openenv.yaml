@@ -1,8 +1,18 @@
-version: "1.0"
-environment:
-  name: "openenv-fairaudit"
-  description: "A single-domain, end-to-end MLOps pipeline simulating the audit and mitigation of algorithmic bias in a financial loan approval model."
-  version: "1.0.0"
+name: "openenv-fairaudit"
+version: "1.0.0"
+spec_version: "1"
+
+client:
+  class_name: "FairAuditEnv"
+  module: "client"
+
+action:
+  class_name: "BiasAuditAction"
+  module: "server.models"
+
+observation:
+  class_name: "BiasAuditObservation"
+  module: "server.models"
 
 tasks:
   - id: "dataset-scan"
