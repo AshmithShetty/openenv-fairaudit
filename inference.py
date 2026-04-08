@@ -1,8 +1,6 @@
 import os
 import json
 import asyncio
-import subprocess
-import time
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 
@@ -30,15 +28,11 @@ def log_start(task: str, env: str, model: str) -> None:
 
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    done_str = "true" if done else "false"
-    error_str = "null" if error is None else error
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={error_str}", flush=True)
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done} error={error}", flush=True)
 
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
-    success_str = "true" if success else "false"
-    rewards_str = ",".join([f"{r:.2f}" for r in rewards])
-    print(f"[END] success={success_str} steps={steps} rewards={rewards_str}", flush=True)
+    print(f"[END] success={success} steps={steps} score={score:.4f} rewards={rewards}", flush=True)
 
 
 def get_model_action(client: OpenAI, obs: Dict[str, Any], history: List[str]) -> str:
@@ -73,7 +67,7 @@ async def run_task(client: OpenAI, task_name: str) -> None:
     history: List[str] = []
     rewards: List[float] = []
     steps_taken = 0
-    score = 0.0
+    score = 0.01
     success = False
     max_steps = TASK_STEPS.get(task_name, 15)
     env = None
@@ -130,8 +124,8 @@ async def run_task(client: OpenAI, task_name: str) -> None:
             if done:
                 break
 
-        score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.0
-        score = min(max(score, 0.0), 1.0)
+        raw_score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.0
+        score = min(max(raw_score, 0.01), 0.99)
         success = score >= SUCCESS_SCORE_THRESHOLD
 
     except Exception as exc:
@@ -142,7 +136,8 @@ async def run_task(client: OpenAI, task_name: str) -> None:
             if env is not None:
                 await env.close()
         except Exception as exc:
-            print(f"[DEBUG] env.close() error (container cleanup): {exc}", flush=True)
+            print(f"[DEBUG] env.close() error: {exc}", flush=True)
+        
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 
