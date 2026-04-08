@@ -9,10 +9,10 @@ def grade(state: EpisodeState) -> float:
             agent_flagged_columns.add(finding.column)
             
     if not true_biased_columns and not agent_flagged_columns:
-        return 1.0
+        return 0.99
         
     if not agent_flagged_columns and true_biased_columns:
-        return 0.0
+        return 0.01
 
     true_positives = len(agent_flagged_columns.intersection(true_biased_columns))
     false_positives = len(agent_flagged_columns - true_biased_columns)
@@ -26,4 +26,4 @@ def grade(state: EpisodeState) -> float:
     if precision == 1.0 and recall == 1.0:
         score += 0.1
         
-    return max(0.0, min(1.0, score))
+    return max(0.01, min(0.99, score))

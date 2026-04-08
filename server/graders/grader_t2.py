@@ -5,7 +5,7 @@ def grade(state: EpisodeState) -> float:
     true_severities = state.ground_truth.get("violation_severities", {})
 
     if not gt_metrics or not true_severities:
-        return 0.0
+        return 0.01
 
     score = 0.0
     max_score = 0.0
@@ -46,4 +46,4 @@ def grade(state: EpisodeState) -> float:
             elif gt_sev != "LOW" and agent_severities[attr] != "LOW":
                 score += 0.25
 
-    return max(0.0, min(1.0, score / max_score)) if max_score > 0 else 0.0
+    return max(0.01, min(0.99, score / max_score)) if max_score > 0 else 0.01

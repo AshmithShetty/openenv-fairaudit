@@ -30,4 +30,4 @@ def grade(state: EpisodeState) -> float:
     elif new_di > orig_di:
         score += 0.2
         
-    return max(0.0, min(1.0, score))
+    return max(0.01, min(0.99, score))
